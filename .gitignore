@@ -1,0 +1,7 @@
+node_modules/
+dist/win-unpacked/
+dist/builder-debug.yml
+dist/*.blockmap
+*.tmp
+.DS_Store
+Thumbs.db

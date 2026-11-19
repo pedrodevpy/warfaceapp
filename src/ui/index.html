@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; style-src 'self'; script-src 'self'; img-src 'self' https: data:"
+    />
+    <title>Switchboard</title>
+    <link rel="stylesheet" href="ui.css" />
+  </head>
+  <body>
+    <header id="top"></header>
+    <nav id="rail" aria-label="Services">
+      <div id="services"></div>
+      <button id="update" class="tile update" type="button" hidden aria-label="Install the update">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M12 4.5v10M7.5 10.5 12 15l4.5-4.5M6 19h12" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" />
+        </svg>
+      </button>
+      <button id="add" class="tile" type="button" title="Add a service  ⌘N" aria-label="Add a service">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M12 5.5v13M5.5 12h13" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" />
+        </svg>
+      </button>
+    </nav>
+    <main id="stage"></main>
+    <script src="ui.js"></script>
+  </body>
+</html>
