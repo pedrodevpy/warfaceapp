@@ -13,6 +13,7 @@ contextBridge.exposeInMainWorld('switchboard', {
   addCustom: (name, url) => ipcRenderer.send('ui:add', { name, url }),
   setDockIcon: (dataUrl) => ipcRenderer.send('ui:dock-icon', dataUrl),
   installUpdate: () => ipcRenderer.send('ui:update'),
+  checkUpdates: () => ipcRenderer.send('ui:check-updates'),
   toggleNotifications: () => ipcRenderer.send('ui:toggle-notifications'),
   toggleSound: () => ipcRenderer.send('ui:toggle-sound'),
 });

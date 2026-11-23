@@ -376,6 +376,22 @@ body.fullscreen {
   background: var(--hover);
 }
 
+.update-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--field);
+}
+
+.version-info {
+  color: var(--text-2);
+  font-size: 13px;
+  font-weight: 500;
+}
+
 .done {
   position: absolute;
   top: 14px;

@@ -79,13 +79,9 @@ const COLORS = {
 };
 
 // Slack and WhatsApp Web refuse browsers that they do not know.
-// This is the user agent of the Chrome release that Electron contains.
+// A standard macOS Chrome user agent identity avoids Slack browser blocks across all platforms.
 const chromeMajor = process.versions.chrome.split('.')[0];
-const defaultUA = isWin
-  ? `Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${chromeMajor}.0.0.0 Safari/537.36`
-  : isMac
-  ? `Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${chromeMajor}.0.0.0 Safari/537.36`
-  : `Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${chromeMajor}.0.0.0 Safari/537.36`;
+const defaultUA = `Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${chromeMajor}.0.0.0 Safari/537.36`;
 app.userAgentFallback = defaultUA;
 
 // Google refuses sign-in from an embedded Chromium. Its sign-in pages get a Firefox identity:
@@ -854,6 +850,11 @@ function updateTrayMenu() {
     })),
     { type: 'separator' },
     {
+      label: '🔄 Buscar actualizaciones…',
+      click: () => checkForUpdates(),
+    },
+    { type: 'separator' },
+    {
       label: 'Quit',
       click: () => {
         quitting = true;
@@ -938,6 +939,8 @@ function buildMenu() {
             submenu: [
               { label: 'Add Service…', accelerator: 'CommandOrControl+N', click: () => (showWindow(), setPanel('add')) },
               { type: 'separator' },
+              { label: 'Buscar actualizaciones…', click: () => checkForUpdates() },
+              { type: 'separator' },
               {
                 label: 'Show Notifications Overlay',
                 type: 'checkbox',
@@ -1019,6 +1022,8 @@ function buildMenu() {
     {
       role: 'help',
       submenu: [
+        { label: 'Buscar actualizaciones…', click: () => checkForUpdates() },
+        { type: 'separator' },
         {
           label: 'Send Feedback…',
           click: () => openExternal(`https://github.com/${RELEASES}/issues/new`),
@@ -1125,13 +1130,14 @@ function createWindow() {
 
 // The rail is the only page that can use these. A service page cannot.
 const fromRail = (e) => Boolean(win && !win.isDestroyed() && e.sender === win.webContents);
-ipcMain.handle('ui:init', (e) => (fromRail(e) ? { presets, state: snapshot() } : null));
+ipcMain.handle('ui:init', (e) => (fromRail(e) ? { presets, state: snapshot(), version: app.getVersion() } : null));
 ipcMain.on('ui:activate', (e, id) => fromRail(e) && activate(id));
 ipcMain.on('ui:context', (e, id) => fromRail(e) && railContextMenu(id));
 ipcMain.on('ui:retry', (e, id) => fromRail(e) && reload(id));
 ipcMain.on('ui:panel', (e, name) => fromRail(e) && setPanel(name === 'add' ? 'add' : null));
 ipcMain.on('ui:add', (e, payload) => fromRail(e) && addService(payload || {}));
 ipcMain.on('ui:update', (e) => fromRail(e) && installUpdate());
+ipcMain.on('ui:check-updates', (e) => fromRail(e) && checkForUpdates());
 ipcMain.on('ui:toggle-notifications', (e) => fromRail(e) && setNotificationsEnabled(cfg.notificationsEnabled === false));
 ipcMain.on('ui:toggle-sound', (e) => fromRail(e) && setSoundEnabled(cfg.soundEnabled === false));
 
@@ -1176,6 +1182,30 @@ let updater = null;
 async function installUpdate({ ask = true } = {}) {
   const state = updater.state();
   if (state.status !== 'ready') return;
+  if (isWin) {
+    if (ask) {
+      const { response } = await dialog.showMessageBox(win, {
+        type: 'info',
+        title: 'Actualización disponible',
+        message: `¡Switchboard v${state.version} está disponible!`,
+        detail: state.notes
+          ? `Novedades:\n${state.notes.slice(0, 300)}\n\n¿Deseas descargar la actualización ahora?`
+          : '¿Deseas descargar la última versión de Switchboard desde GitHub?',
+        buttons: ['Descargar actualización', 'Ver en GitHub', 'Más tarde'],
+        defaultId: 0,
+        cancelId: 2,
+      });
+      if (response === 0) {
+        updater.apply();
+      } else if (response === 1) {
+        shell.openExternal(state.releaseUrl || `https://github.com/${RELEASES}/releases`);
+      }
+      return;
+    }
+    updater.apply();
+    return;
+  }
+
   if (ask) {
     const { response } = await dialog.showMessageBox(win, {
       type: 'info',
@@ -1196,6 +1226,38 @@ async function installUpdate({ ask = true } = {}) {
 async function checkForUpdates() {
   const state = await updater.check();
   if (state.status === 'ready') return installUpdate();
+  if (isWin) {
+    if (state.status === 'idle') {
+      dialog.showMessageBox(win, {
+        type: 'info',
+        title: 'Actualizaciones de Switchboard',
+        message: 'Switchboard está actualizado',
+        detail: `Estás utilizando la versión más reciente (v${app.getVersion()}). No hay actualizaciones pendientes.`,
+        buttons: ['Aceptar'],
+      });
+      return;
+    }
+    if (state.status === 'error') {
+      dialog.showMessageBox(win, {
+        type: 'warning',
+        title: 'Comprobar actualizaciones',
+        message: 'No se pudo comprobar si hay actualizaciones',
+        detail: `Detalle: ${state.error || 'Verifica tu conexión a internet.'}`,
+        buttons: ['Aceptar'],
+      });
+      return;
+    }
+    if (state.status === 'checking') {
+      dialog.showMessageBox(win, {
+        type: 'info',
+        title: 'Actualizaciones',
+        message: 'Comprobando actualizaciones...',
+        buttons: ['Aceptar'],
+      });
+      return;
+    }
+  }
+
   const text = {
     idle: [`Switchboard ${app.getVersion()} is the latest version.`, ''],
     checking: ['A check is in progress.', ''],

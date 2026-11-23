@@ -7,6 +7,7 @@ const notifBtn = document.getElementById('toggle-notifications');
 const soundBtn = document.getElementById('toggle-sound');
 
 let presets = [];
+let appVersion = '0.2.4';
 let state = { services: [], activeId: null, panel: null };
 const tiles = new Map(); // service id -> button
 let stageKey = null;
@@ -145,7 +146,31 @@ function addPanel() {
         )
       ),
       h('div', { class: 'label' }, 'Any web app'),
-      form
+      form,
+      h('div', { class: 'label' }, 'Actualizaciones'),
+      h(
+        'div',
+        { class: 'update-row' },
+        h('span', { class: 'version-info' }, `Switchboard v${appVersion}`),
+        h(
+          'button',
+          {
+            class: 'button quiet',
+            type: 'button',
+            onclick: (e) => {
+              const btn = e.currentTarget;
+              btn.disabled = true;
+              btn.textContent = 'Buscando...';
+              api.checkUpdates();
+              setTimeout(() => {
+                btn.disabled = false;
+                btn.textContent = 'Buscar actualizaciones';
+              }, 2500);
+            },
+          },
+          'Buscar actualizaciones'
+        )
+      )
     ),
   ];
 }
@@ -280,5 +305,6 @@ api.init().then((init) => {
     addBtn.title = 'Add a service  Ctrl+N';
   }
   presets = init.presets;
+  if (init.version) appVersion = init.version;
   render(init.state);
 });

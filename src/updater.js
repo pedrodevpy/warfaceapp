@@ -1,12 +1,5 @@
-// Self-update for a build with no Apple signature.
-// The standard Electron updater needs an Apple signature, so this one is written for
-// Switchboard. A release is three files in the public downloads repository:
-//   manifest.json       version, file name, size and SHA-256 of the zip
-//   manifest.json.sig   Ed25519 signature of manifest.json, made with a key that only
-//                       the publisher has (see scripts/release.js)
-//   Switchboard-arm64.zip
-// The app accepts an update only if the signature is valid and the zip matches the manifest.
-const { app, net } = require('electron');
+// Update checker for Switchboard on Windows and macOS.
+const { app, net, shell } = require('electron');
 const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
@@ -15,12 +8,13 @@ const { Readable, Transform } = require('node:stream');
 const { pipeline } = require('node:stream/promises');
 const { PUBLIC_KEY, RELEASES, BUNDLE_ID } = require('./update-config');
 
+const isWin = process.platform === 'win32';
+const GITHUB_API = `https://api.github.com/repos/${RELEASES}/releases/latest`;
 const BASE = `https://github.com/${RELEASES}/releases/latest/download`;
 const CHECK_AFTER_START = 30 * 1000;
 const CHECK_EVERY = 4 * 60 * 60 * 1000;
 const MAX_SIZE = 600 * 1024 * 1024;
 
-// Runs after the app quits: waits for the process to end, replaces the app, opens it again.
 const APPLY_SCRIPT = `#!/bin/sh
 PID="$1"; NEW="$2"; APP="$3"; ROOT="$4"
 while kill -0 "$PID" 2>/dev/null; do sleep 0.3; done
@@ -28,10 +22,11 @@ while kill -0 "$PID" 2>/dev/null; do sleep 0.3; done
 /bin/rm -rf "$ROOT"
 `;
 
-// True if version a is newer than version b. Both are "1.2.3".
+// True if version a is newer than version b. Both are e.g. "0.2.5" or "v0.2.5".
 function newer(a, b) {
-  const x = String(a).split('.').map(Number);
-  const y = String(b).split('.').map(Number);
+  const clean = (v) => String(v || '').replace(/^v/i, '').split('.').map(Number);
+  const x = clean(a);
+  const y = clean(b);
   for (let i = 0; i < 3; i++) {
     if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) > (y[i] || 0);
   }
@@ -55,9 +50,17 @@ function verifyManifest(raw, signature) {
 
 function createUpdater({ onChange }) {
   // status: idle | checking | downloading | ready | error | blocked
-  const state = { status: 'idle', version: null, error: null, checkedAt: null };
+  const state = {
+    status: 'idle',
+    version: null,
+    error: null,
+    checkedAt: null,
+    downloadUrl: null,
+    releaseUrl: null,
+    notes: null,
+  };
   const bundle = path.resolve(app.getPath('exe'), '..', '..', '..');
-  let staged = null; // { root, appPath }
+  let staged = null;
   let busy = false;
 
   const set = (patch) => {
@@ -65,16 +68,52 @@ function createUpdater({ onChange }) {
     onChange({ ...state });
   };
 
-  function blockedReason() {
-    if (process.platform !== 'darwin') return 'Updates are managed separately on Windows.';
-    if (!app.isPackaged) return 'This is a development run.';
-    if (bundle.includes('/AppTranslocation/')) return 'Move Switchboard to the Applications folder, then open it again.';
+  async function checkWindows() {
     try {
-      fs.accessSync(bundle, fs.constants.W_OK);
-    } catch {
-      return 'Switchboard cannot change its own files in this folder.';
+      const res = await net.fetch(GITHUB_API, {
+        headers: {
+          'User-Agent': 'Switchboard-Updater',
+          'Accept': 'application/vnd.github.v3+json',
+        },
+        cache: 'no-store',
+      });
+      if (res.status === 404) {
+        // No releases published yet in this repo
+        set({ status: 'idle', version: null, error: null, checkedAt: Date.now() });
+        return state;
+      }
+      if (!res.ok) throw new Error(`El servidor de GitHub respondió con código ${res.status}`);
+      const data = await res.json();
+      const rawTag = data.tag_name || data.name || '';
+      const releaseVersion = rawTag.replace(/^v/i, '').trim();
+
+      if (!releaseVersion || !newer(releaseVersion, app.getVersion())) {
+        set({ status: 'idle', version: null, error: null, checkedAt: Date.now() });
+        return state;
+      }
+
+      let downloadUrl = data.html_url;
+      if (Array.isArray(data.assets) && data.assets.length > 0) {
+        const exeAsset =
+          data.assets.find((a) => a.name.toLowerCase().endsWith('.exe')) || data.assets[0];
+        if (exeAsset && exeAsset.browser_download_url) {
+          downloadUrl = exeAsset.browser_download_url;
+        }
+      }
+
+      set({
+        status: 'ready',
+        version: releaseVersion,
+        releaseUrl: data.html_url,
+        downloadUrl,
+        notes: data.body || '',
+        error: null,
+        checkedAt: Date.now(),
+      });
+    } catch (err) {
+      set({ status: 'error', error: String(err.message || err), checkedAt: Date.now() });
     }
-    return null;
+    return state;
   }
 
   async function fetchSmall(name, max) {
@@ -85,9 +124,8 @@ function createUpdater({ onChange }) {
     return data;
   }
 
-  async function download(manifest) {
+  async function downloadMac(manifest) {
     const root = path.join(app.getPath('userData'), 'updates');
-    // /bin/rm, not fs.rm: Electron reads an .asar file as a folder, which confuses fs.rm.
     spawnSync('/bin/rm', ['-rf', root]);
     fs.mkdirSync(root, { recursive: true });
 
@@ -124,35 +162,59 @@ function createUpdater({ onChange }) {
   }
 
   async function check() {
-    if (busy || staged) return state;
-    const reason = blockedReason();
-    if (reason) {
-      set({ status: 'blocked', error: reason });
-      return state;
-    }
+    if (busy) return state;
     busy = true;
     set({ status: 'checking', error: null });
+
     try {
-      const [raw, signature] = await Promise.all([fetchSmall('manifest.json', 64 * 1024), fetchSmall('manifest.json.sig', 1024)]);
-      const manifest = verifyManifest(raw, signature.toString('utf8'));
-      if (manifest.arch && manifest.arch !== process.arch) throw new Error(`This release is for ${manifest.arch} Macs.`);
-      if (!newer(manifest.version, app.getVersion())) {
-        set({ status: 'idle', version: null, checkedAt: Date.now() });
-        return state;
+      if (isWin) {
+        await checkWindows();
+      } else {
+        if (!app.isPackaged) {
+          set({ status: 'blocked', error: 'This is a development run.' });
+          return state;
+        }
+        if (bundle.includes('/AppTranslocation/')) {
+          set({ status: 'blocked', error: 'Move Switchboard to the Applications folder, then open it again.' });
+          return state;
+        }
+        try {
+          fs.accessSync(bundle, fs.constants.W_OK);
+        } catch {
+          set({ status: 'blocked', error: 'Switchboard cannot change its own files in this folder.' });
+          return state;
+        }
+
+        const [raw, signature] = await Promise.all([
+          fetchSmall('manifest.json', 64 * 1024),
+          fetchSmall('manifest.json.sig', 1024),
+        ]);
+        const manifest = verifyManifest(raw, signature.toString('utf8'));
+        if (manifest.arch && manifest.arch !== process.arch) throw new Error(`This release is for ${manifest.arch} Macs.`);
+        if (!newer(manifest.version, app.getVersion())) {
+          set({ status: 'idle', version: null, checkedAt: Date.now() });
+          return state;
+        }
+        set({ status: 'downloading', version: manifest.version, checkedAt: Date.now() });
+        await downloadMac(manifest);
+        set({ status: 'ready' });
       }
-      set({ status: 'downloading', version: manifest.version, checkedAt: Date.now() });
-      await download(manifest);
-      set({ status: 'ready' });
     } catch (err) {
-      set({ status: 'error', error: String(err.message || err) });
+      set({ status: 'error', error: String(err.message || err), checkedAt: Date.now() });
     } finally {
       busy = false;
     }
     return state;
   }
 
-  // Starts the script that replaces the app. The caller must quit the app after this.
   function apply() {
+    if (isWin) {
+      if (state.status !== 'ready') return false;
+      const target = state.downloadUrl || state.releaseUrl || `https://github.com/${RELEASES}/releases`;
+      shell.openExternal(target);
+      return true;
+    }
+
     if (!staged) return false;
     const script = path.join(staged.root, 'apply.sh');
     fs.writeFileSync(script, APPLY_SCRIPT, { mode: 0o700 });
