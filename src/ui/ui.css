@@ -138,6 +138,19 @@ body.fullscreen {
   color: var(--glyph-active);
 }
 
+.tile.muted {
+  opacity: 0.45;
+  color: var(--text-3);
+}
+
+.tile.muted:hover {
+  opacity: 0.85;
+}
+
+#rail > button.tile {
+  margin-top: 3px;
+}
+
 .tile svg {
   width: 22px;
   height: 22px;

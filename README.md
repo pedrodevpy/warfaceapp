@@ -53,6 +53,8 @@ Originally conceived as Switchboard for macOS, this project is ported to Windows
 * <kbd>Ctrl</kbd> + <kbd>R</kbd>: Reload active service
 * <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>R</kbd>: Hard reload (clear cache)
 * <kbd>Ctrl</kbd> + <kbd>0</kbd> / <kbd>+</kbd> / <kbd>-</kbd>: Reset / Zoom In / Zoom Out
+* <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>N</kbd>: Toggle on-screen notification overlay (Do Not Disturb / Game Mode)
+* <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>M</kbd>: Toggle message sounds
 * <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>I</kbd>: Open DevTools for current service
 
 ---
@@ -85,6 +87,8 @@ Basado en el diseño original de Switchboard para macOS, esta versión fue porta
 * <kbd>Ctrl</kbd> + <kbd>R</kbd>: Recargar servicio activo
 * <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>R</kbd>: Recargar forzando borrado de caché
 * <kbd>Ctrl</kbd> + <kbd>0</kbd> / <kbd>+</kbd> / <kbd>-</kbd>: Zoom estándar / Aumentar / Disminuir
+* <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>N</kbd>: Activar/Desactivar banners y overlay en pantalla (Modo Juego / No Molestar)
+* <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>M</kbd>: Activar/Desactivar sonido de mensajes
 * <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>I</kbd>: Herramientas de desarrollo (DevTools)
 
 ---

@@ -2,6 +2,7 @@ node_modules/
 dist/win-unpacked/
 dist/builder-debug.yml
 dist/*.blockmap
+dist/*.yml
 *.tmp
 .DS_Store
 Thumbs.db

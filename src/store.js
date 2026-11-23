@@ -11,7 +11,13 @@ function defaults() {
     const p = presetById.get(id);
     return { id, preset: id, name: p.name, url: p.url };
   });
-  return { services, activeId: services[0].id, bounds: { width: 1280, height: 820 } };
+  return {
+    services,
+    activeId: services[0].id,
+    bounds: { width: 1280, height: 820 },
+    notificationsEnabled: true,
+    soundEnabled: true,
+  };
 }
 
 function load() {

@@ -3,6 +3,8 @@ const railEl = document.getElementById('services');
 const stageEl = document.getElementById('stage');
 const addBtn = document.getElementById('add');
 const updateBtn = document.getElementById('update');
+const notifBtn = document.getElementById('toggle-notifications');
+const soundBtn = document.getElementById('toggle-sound');
 
 let presets = [];
 let state = { services: [], activeId: null, panel: null };
@@ -232,6 +234,31 @@ function render(next) {
     drawDock(dockText);
   }
   document.body.classList.toggle('fullscreen', Boolean(state.fullscreen));
+
+  if (notifBtn) {
+    const notifOn = state.notificationsEnabled !== false;
+    notifBtn.classList.toggle('muted', !notifOn);
+    notifBtn.title = notifOn
+      ? 'Notificaciones en pantalla (Activadas) — Clic para desactivar'
+      : 'Notificaciones en pantalla (Desactivadas - Modo Juego) — Clic para activar';
+    const onIcon = notifBtn.querySelector('.icon-on');
+    const offIcon = notifBtn.querySelector('.icon-off');
+    if (onIcon) onIcon.style.display = notifOn ? 'block' : 'none';
+    if (offIcon) offIcon.style.display = notifOn ? 'none' : 'block';
+  }
+
+  if (soundBtn) {
+    const soundOn = state.soundEnabled !== false;
+    soundBtn.classList.toggle('muted', !soundOn);
+    soundBtn.title = soundOn
+      ? 'Sonido de mensajes (Activado) — Clic para silenciar'
+      : 'Sonido de mensajes (Silenciado) — Clic para activar';
+    const onIcon = soundBtn.querySelector('.icon-on');
+    const offIcon = soundBtn.querySelector('.icon-off');
+    if (onIcon) onIcon.style.display = soundOn ? 'block' : 'none';
+    if (offIcon) offIcon.style.display = soundOn ? 'none' : 'block';
+  }
+
   renderRail();
   renderStage();
 }
@@ -240,6 +267,8 @@ function render(next) {
 
 addBtn.addEventListener('click', () => api.setPanel(state.panel === 'add' ? null : 'add'));
 updateBtn.addEventListener('click', () => api.installUpdate());
+if (notifBtn) notifBtn.addEventListener('click', () => api.toggleNotifications());
+if (soundBtn) soundBtn.addEventListener('click', () => api.toggleSound());
 
 window.addEventListener('keydown', (e) => {
   if (e.key === 'Escape' && state.panel && state.services.length) api.setPanel(null);

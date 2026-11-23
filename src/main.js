@@ -151,6 +151,8 @@ function snapshot() {
   return {
     activeId: cfg.activeId,
     panel,
+    notificationsEnabled: cfg.notificationsEnabled !== false,
+    soundEnabled: cfg.soundEnabled !== false,
     update: updater && updater.state().status === 'ready' ? updater.state().version : null,
     fullscreen: Boolean(win && !win.isDestroyed() && win.isFullScreen()),
     services: cfg.services.map((svc) => {
@@ -560,6 +562,9 @@ function mount(svc) {
   };
   live.set(svc.id, s);
   const wc = view.webContents;
+  try {
+    wc.setAudioMuted(cfg.soundEnabled === false);
+  } catch {}
 
   wc.on('page-title-updated', (_e, title) => {
     s.title = title;
@@ -778,11 +783,67 @@ function zoom(step) {
   wc.setZoomLevel(step === 0 ? 0 : Math.max(-3, Math.min(4, wc.getZoomLevel() + step * 0.5)));
 }
 
+function applyAudioSettings() {
+  const muted = cfg.soundEnabled === false;
+  for (const [, s] of live) {
+    try {
+      s.view.webContents.setAudioMuted(muted);
+    } catch {}
+  }
+}
+
+function setSoundEnabled(enabled) {
+  cfg.soundEnabled = Boolean(enabled);
+  applyAudioSettings();
+  store.save(cfg);
+  updateTrayMenu();
+  buildMenu();
+  push();
+}
+
+function setNotificationsEnabled(enabled) {
+  cfg.notificationsEnabled = Boolean(enabled);
+  if (!cfg.notificationsEnabled && toasts) {
+    for (const [key] of notes) {
+      toasts.close(key);
+    }
+  }
+  store.save(cfg);
+  updateTrayMenu();
+  buildMenu();
+  push();
+}
+
 let tray = null;
 function updateTrayMenu() {
   if (!tray || isMac) return;
+  const notifOn = cfg.notificationsEnabled !== false;
+  const soundOn = cfg.soundEnabled !== false;
+  const gameModeOn = !notifOn && !soundOn;
+
   const contextMenu = Menu.buildFromTemplate([
     { label: 'Open Switchboard', click: () => showWindow() },
+    { type: 'separator' },
+    {
+      label: 'Mostrar notificaciones en pantalla',
+      type: 'checkbox',
+      checked: notifOn,
+      click: (item) => setNotificationsEnabled(item.checked),
+    },
+    {
+      label: 'Sonido de mensajes',
+      type: 'checkbox',
+      checked: soundOn,
+      click: (item) => setSoundEnabled(item.checked),
+    },
+    {
+      label: gameModeOn ? '🎮 Modo Juego: ACTIVO (Desactivar)' : '🎮 Activar Modo Juego (Silenciar todo)',
+      click: () => {
+        const turnOff = !gameModeOn;
+        setNotificationsEnabled(!turnOff);
+        setSoundEnabled(!turnOff);
+      },
+    },
     { type: 'separator' },
     ...cfg.services.map((svc) => ({
       label: svc.name,
@@ -828,6 +889,9 @@ function buildMenu() {
     },
   }));
 
+  const notifOn = cfg.notificationsEnabled !== false;
+  const soundOn = cfg.soundEnabled !== false;
+
   const template = [
     ...(isMac
       ? [
@@ -836,6 +900,19 @@ function buildMenu() {
             submenu: [
               { role: 'about' },
               { label: 'Check for Updates…', click: () => checkForUpdates() },
+              { type: 'separator' },
+              {
+                label: 'Show Notifications Overlay',
+                type: 'checkbox',
+                checked: notifOn,
+                click: (item) => setNotificationsEnabled(item.checked),
+              },
+              {
+                label: 'Message Sounds',
+                type: 'checkbox',
+                checked: soundOn,
+                click: (item) => setSoundEnabled(item.checked),
+              },
               { type: 'separator' },
               {
                 label: 'Open at Login',
@@ -860,6 +937,30 @@ function buildMenu() {
             label: '&File',
             submenu: [
               { label: 'Add Service…', accelerator: 'CommandOrControl+N', click: () => (showWindow(), setPanel('add')) },
+              { type: 'separator' },
+              {
+                label: 'Show Notifications Overlay',
+                type: 'checkbox',
+                checked: notifOn,
+                accelerator: 'CommandOrControl+Shift+N',
+                click: (item) => setNotificationsEnabled(item.checked),
+              },
+              {
+                label: 'Message Sounds',
+                type: 'checkbox',
+                checked: soundOn,
+                accelerator: 'CommandOrControl+Shift+M',
+                click: (item) => setSoundEnabled(item.checked),
+              },
+              {
+                label: 'Game Mode (Mute All)',
+                type: 'checkbox',
+                checked: !notifOn && !soundOn,
+                click: (item) => {
+                  setNotificationsEnabled(!item.checked);
+                  setSoundEnabled(!item.checked);
+                },
+              },
               { type: 'separator' },
               {
                 label: 'Open at Login',
@@ -1031,6 +1132,8 @@ ipcMain.on('ui:retry', (e, id) => fromRail(e) && reload(id));
 ipcMain.on('ui:panel', (e, name) => fromRail(e) && setPanel(name === 'add' ? 'add' : null));
 ipcMain.on('ui:add', (e, payload) => fromRail(e) && addService(payload || {}));
 ipcMain.on('ui:update', (e) => fromRail(e) && installUpdate());
+ipcMain.on('ui:toggle-notifications', (e) => fromRail(e) && setNotificationsEnabled(cfg.notificationsEnabled === false));
+ipcMain.on('ui:toggle-sound', (e) => fromRail(e) && setSoundEnabled(cfg.soundEnabled === false));
 
 let dockIcon = null; // The last drawn icon. The test harness reads it.
 ipcMain.on('ui:dock-icon', (e, dataUrl) => {
@@ -1165,6 +1268,10 @@ function showBanner(note) {
 }
 
 function present(note) {
+  if (cfg.notificationsEnabled === false) {
+    logNote(note.service, 'muted-by-user');
+    return;
+  }
   if (!nativeNotifications || !Notification.isSupported()) return showBanner(note);
   logNote(note.service, 'macos-try');
   // The service plays its own sound, so the macOS notification is silent.
@@ -1426,6 +1533,7 @@ if (!gotLock) {
   app.whenReady().then(() => {
     cfg = store.load();
     createWindow();
+    applyAudioSettings();
     buildMenu();
     toasts = createToasts({ onClick: noteClicked, onClose: (key) => noteEvent(key, 'close') });
     updater = createUpdater({ onChange: () => push() });
