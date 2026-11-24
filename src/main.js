@@ -79,11 +79,9 @@ const COLORS = {
 };
 
 // Slack and WhatsApp Web refuse browsers that they do not know.
-const chromeVer = '131.0.0.0';
-const defaultUA = isWin
-  ? `Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${chromeVer} Safari/537.36`
-  : `Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${chromeVer} Safari/537.36`;
-app.userAgentFallback = defaultUA;
+// Remove Electron from the fallback UA so web apps recognize it as clean Chrome
+// while preserving the exact native Chromium engine version and client hints.
+app.userAgentFallback = app.userAgentFallback.replace(/Electron\/[0-9\.]+\s?/, '');
 
 // Google refuses sign-in from an embedded Chromium. Its sign-in pages get a Firefox identity:
 // the user agent changes and the Chrome-only client hint headers go away. Other pages keep Chrome.

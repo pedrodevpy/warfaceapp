@@ -160,21 +160,24 @@ function patch() {
     } catch {}
   } else if (!navigator.userAgentData) {
     try {
+      const match = (navigator.userAgent || '').match(/Chrome\/(\d+)/);
+      const major = match ? match[1] : '131';
+      const isMacPlatform = (navigator.platform || '').includes('Mac');
       const uad = {
         brands: [
-          { brand: 'Chromium', version: '131' },
-          { brand: 'Google Chrome', version: '131' },
+          { brand: 'Chromium', version: major },
+          { brand: 'Google Chrome', version: major },
           { brand: 'Not_A Brand', version: '24' }
         ],
         mobile: false,
-        platform: 'Windows',
+        platform: isMacPlatform ? 'macOS' : 'Windows',
         getHighEntropyValues: () => Promise.resolve({
           architecture: 'x86',
           bitness: '64',
           model: '',
-          platform: 'Windows',
+          platform: isMacPlatform ? 'macOS' : 'Windows',
           platformVersion: '10.0.0',
-          uaFullVersion: '131.0.0.0'
+          uaFullVersion: `${major}.0.0.0`
         })
       };
       Object.defineProperty(Navigator.prototype, 'userAgentData', {
