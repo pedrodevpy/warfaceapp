@@ -158,6 +158,60 @@ function patch() {
     try {
       delete Navigator.prototype.userAgentData;
     } catch {}
+  } else if (!navigator.userAgentData) {
+    try {
+      const uad = {
+        brands: [
+          { brand: 'Chromium', version: '131' },
+          { brand: 'Google Chrome', version: '131' },
+          { brand: 'Not_A Brand', version: '24' }
+        ],
+        mobile: false,
+        platform: 'Windows',
+        getHighEntropyValues: () => Promise.resolve({
+          architecture: 'x86',
+          bitness: '64',
+          model: '',
+          platform: 'Windows',
+          platformVersion: '10.0.0',
+          uaFullVersion: '131.0.0.0'
+        })
+      };
+      Object.defineProperty(Navigator.prototype, 'userAgentData', {
+        get: () => uad,
+        configurable: true,
+        enumerable: true
+      });
+    } catch {}
+  }
+
+  if (!window.chrome && location.hostname !== 'accounts.google.com') {
+    try {
+      window.chrome = { app: { isInstalled: false }, runtime: {} };
+    } catch {}
+  }
+
+  // Slack recovery guard: if client-side redirects to downloads or unsupported page
+  if (location.hostname.endsWith('slack.com')) {
+    const recoverSlack = () => {
+      const href = location.href;
+      const text = document.body ? document.body.innerText : '';
+      if (!href.includes('/signin') && (
+        href.includes('/downloads') ||
+        href.includes('/unsupported') ||
+        text.includes('navegador no es compatible') ||
+        text.includes('browser is not supported') ||
+        text.includes('Actualiza tu navegador')
+      )) {
+        window.location.replace('https://slack.com/signin');
+      }
+    };
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', recoverSlack);
+    } else {
+      recoverSlack();
+    }
+    setTimeout(recoverSlack, 1500);
   }
 
   const bridge = window.__switchboard;
