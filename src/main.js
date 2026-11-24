@@ -79,9 +79,10 @@ const COLORS = {
 };
 
 // Slack and WhatsApp Web refuse browsers that they do not know.
-// A standard macOS Chrome user agent identity avoids Slack browser blocks across all platforms.
 const chromeMajor = process.versions.chrome.split('.')[0];
-const defaultUA = `Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${chromeMajor}.0.0.0 Safari/537.36`;
+const defaultUA = isWin
+  ? `Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${chromeMajor}.0.0.0 Safari/537.36 Edg/${chromeMajor}.0.0.0`
+  : `Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${chromeMajor}.0.0.0 Safari/537.36`;
 app.userAgentFallback = defaultUA;
 
 // Google refuses sign-in from an embedded Chromium. Its sign-in pages get a Firefox identity:
@@ -638,6 +639,11 @@ function mount(svc) {
     contents.on('will-frame-navigate', (e) => httpOnly(e, e.url));
     contents.setWindowOpenHandler(onOpen);
     useGoogleIdentity(contents);
+    contents.on('did-navigate', (_e, url) => {
+      if ((svc.preset === 'slack' || svc.id === 'slack') && (url.includes('/downloads') || url.includes('/unsupported'))) {
+        contents.loadURL('https://slack.com/signin').catch(() => {});
+      }
+    });
     contents.on('did-create-window', (child) => adopt(child.webContents));
   };
   adopt(wc);
@@ -746,6 +752,17 @@ function railContextMenu(id) {
     { type: 'separator' },
     { label: 'Reload', click: () => reload(id) },
     { label: 'Go to Start Page', enabled: Boolean(wc), click: () => wc?.loadURL(svc.url).catch(() => {}) },
+    {
+      label: 'Limpiar caché y reiniciar',
+      click: () => {
+        unmount(id, { wipe: true });
+        setTimeout(() => {
+          wake(id);
+          layout();
+          push();
+        }, 300);
+      },
+    },
     { label: 'Open in Browser', click: () => openExternal(wc?.getURL() || svc.url) },
     { type: 'separator' },
     {

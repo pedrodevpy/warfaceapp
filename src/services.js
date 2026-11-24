@@ -3,7 +3,7 @@ const icons = require('./icons.json');
 
 const catalog = [
   ['whatsapp', 'WhatsApp', 'https://web.whatsapp.com/'],
-  ['slack', 'Slack', 'https://app.slack.com/client'],
+  ['slack', 'Slack', 'https://slack.com/signin'],
   ['telegram', 'Telegram', 'https://web.telegram.org/a/'],
   ['discord', 'Discord', 'https://discord.com/app'],
   ['messenger', 'Messenger', 'https://www.messenger.com/'],
